@@ -3,7 +3,8 @@ Engine fixes for Apple's arm64 (Apple silicon Macs and iPhones).
 delta_rules: Apple passes variadic arguments on the stack and packs stack
 arguments by size; call_entry now lays those calls out by hand. evv_land:
 adds the arm64 equivalent of the x86-64 landing assembly, where setjmp in a
-returning function restored a dead frame. port_posix: page-sized stacks.
+returning function restored a dead frame. port_posix: page-sized stacks, and
+timed waits whose deadline is on the clock the condition variable uses.
 
 diff --git a/src/delta/delta_rules.c b/src/delta/delta_rules.c
 index f30d5ba..59a50c9 100644
@@ -241,7 +242,7 @@ index bc631e7..4d44028 100644
  
  /* Elsewhere the place holds the C library's own buffer, so it is as big as
 diff --git a/src/port/port_posix.c b/src/port/port_posix.c
-index dddc844..24a95ee 100644
+index dddc844..cb13ce4 100644
 --- a/src/port/port_posix.c
 +++ b/src/port/port_posix.c
 @@ -15,6 +15,7 @@
@@ -252,7 +253,40 @@ index dddc844..24a95ee 100644
  #include "evv_port.h"
  #include "evv_arena.h"
  
-@@ -304,6 +305,14 @@ evv_task *evv_task_start(void (*entry)(void *), void *arg, int stack_bytes)
+@@ -64,9 +65,23 @@ unsigned evv_ticks_ms(void)
+                       + (unsigned)(ts.tv_nsec / 1000000));
+ }
+ 
++/* The clock a condition variable's deadline is measured on. Where the
++   variable can be told to use the monotonic clock it is; macOS and iOS have
++   no pthread_condattr_setclock, so there the deadline is in real time, which
++   is the clock their condition variables wait on. */
++#if defined(CLOCK_MONOTONIC) && defined(_POSIX_CLOCK_SELECTION)     && _POSIX_CLOCK_SELECTION > 0 && !defined(__APPLE__)
++#define EVV_COND_MONOTONIC 1
++#else
++#define EVV_COND_MONOTONIC 0
++#endif
++
+ static void evv_deadline(struct timespec *ts, int ms)
+ {
++#if EVV_COND_MONOTONIC
+     evv_now(ts);
++#else
++    clock_gettime(CLOCK_REALTIME, ts);
++#endif
+     ts->tv_sec += ms / 1000;
+     ts->tv_nsec += (long)(ms % 1000) * 1000000L;
+     if (ts->tv_nsec >= 1000000000L) {
+@@ -91,7 +106,7 @@ static int evv_gate_init(struct evv_gate *g, int count)
+         return -1;
+ 
+     pthread_condattr_init(&attr);
+-#if defined(CLOCK_MONOTONIC) && defined(_POSIX_CLOCK_SELECTION)
++#if EVV_COND_MONOTONIC
+     pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+ #endif
+     if (pthread_cond_init(&g->wake, &attr) != 0) {
+@@ -304,6 +319,14 @@ evv_task *evv_task_start(void (*entry)(void *), void *arg, int stack_bytes)
      pthread_attr_init(&attr);
      if (stack_bytes < PTHREAD_STACK_MIN)
          stack_bytes = PTHREAD_STACK_MIN;
