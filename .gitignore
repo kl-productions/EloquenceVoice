@@ -1,0 +1,10 @@
+Vendor/
+*.xcodeproj/
+App/Info.plist
+App/App.entitlements
+Extension/Info.plist
+Extension/Extension.entitlements
+DerivedData/
+Payload/
+*.ipa
+.DS_Store

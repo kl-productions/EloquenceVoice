@@ -1,0 +1,87 @@
+# XcodeGen project: `xcodegen generate` writes EloquenceVoice.xcodeproj.
+# Change BUNDLE_ROOT to something that is yours before signing.
+name: EloquenceVoice
+options:
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    BUNDLE_ROOT: com.example.eloquencevoice
+    APP_GROUP: group.$(BUNDLE_ROOT)
+    SWIFT_VERSION: "5.9"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  EloquenceVoice:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared/Swift
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Eloquence Voice
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        OEVVAppGroup: $(APP_GROUP)
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(APP_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ROOT)
+    dependencies:
+      - target: EloquenceSynth
+    scheme: {}
+
+  EloquenceSynth:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Extension
+      - Shared/Swift
+      - Shared/Engine
+    info:
+      path: Extension/Info.plist
+      properties:
+        CFBundleDisplayName: Eloquence Synthesizer
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        OEVVAppGroup: $(APP_GROUP)
+        # The shape Apple's own speech synthesizer sample and the eSpeak-NG
+        # app both ship with.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.AudioUnit
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).AudioUnitFactory
+          NSExtensionAttributes:
+            AudioComponents:
+              - name: "OpenEVV: Eloquence"
+                description: Eloquence speech synthesizer
+                manufacturer: OEVV
+                subtype: elqn
+                type: ausp
+                version: 67072
+                sandboxSafe: true
+                tags:
+                  - Speech Synthesizer
+    entitlements:
+      path: Extension/Extension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(APP_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ROOT).synth
+        SWIFT_OBJC_BRIDGING_HEADER: Extension/Extension-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/openevv/include $(SRCROOT)/Shared/Engine
+        GCC_C_LANGUAGE_STANDARD: gnu11
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) ECI_STATIC=1
+    dependencies:
+      - framework: Vendor/OpenEVV.xcframework
+        embed: false
