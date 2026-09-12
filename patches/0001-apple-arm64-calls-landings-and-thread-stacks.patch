@@ -1,0 +1,269 @@
+Engine fixes for Apple's arm64 (Apple silicon Macs and iPhones).
+
+delta_rules: Apple passes variadic arguments on the stack and packs stack
+arguments by size; call_entry now lays those calls out by hand. evv_land:
+adds the arm64 equivalent of the x86-64 landing assembly, where setjmp in a
+returning function restored a dead frame. port_posix: page-sized stacks.
+
+diff --git a/src/delta/delta_rules.c b/src/delta/delta_rules.c
+index f30d5ba..59a50c9 100644
+--- a/src/delta/delta_rules.c
++++ b/src/delta/delta_rules.c
+@@ -338,6 +338,115 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
+           WM(m, 20, a[20]), WM(m, 21, a[21]), WM(m, 22, a[22]), WM(m, 23, a[23]), \
+           WM(m, 24, a[24])
+ 
++#if defined(__APPLE__) && defined(__aarch64__)
++
++/* Apple's arm64 differs from every other 64-bit target here in two ways, and
++   the calls below get both wrong without this.
++ *
++ *   - A variadic function's unnamed arguments are on the stack, never in
++ *     registers, where System V and Windows pass them just like named ones.
++ *     Six entries are variadic: setNonSequential walks its with va_arg.
++ *   - Arguments past the eighth are packed on the stack at their own size, so
++ *     an int32_t takes four bytes, not an eight-byte slot. The shims with
++ *     nine or more int32_t arguments read the wrong half of each.
++ *
++ * Every argument an entry takes past the eighth is either a pointer or an
++ * int32_t, and the mask already says which, so those calls are laid out by
++ * hand here and made through evv_call_packed. Only those: every other call is
++ * made the ordinary way below. Declared as nothing but addresses to compare
++ * against; their real prototypes live with their definitions. */
++extern void setNonSequential(void);
++extern void registerLanguage(void);
++extern void registerPhoneme(void);
++extern void registerVoice(void);
++extern void registerSAPIVoice(void);
++extern void callSynthesizeArray(void);
++
++/* How many named arguments a variadic entry has, or -1 for one that is not. */
++static int variadic_named(delta_rule_fn fn)
++{
++    if (fn == (delta_rule_fn)setNonSequential)
++        return 2;
++    if (fn == (delta_rule_fn)callSynthesizeArray)
++        return 14;
++    if (fn == (delta_rule_fn)registerLanguage
++        || fn == (delta_rule_fn)registerPhoneme
++        || fn == (delta_rule_fn)registerVoice
++        || fn == (delta_rule_fn)registerSAPIVoice)
++        return 1;
++    return -1;
++}
++
++/* x0 the function, x1 eight register words, x2 the stack block, x3 its size
++   (a multiple of sixteen). Loads the registers, puts the block at the stack
++   pointer, calls, and answers with x0. */
++evv_word evv_call_packed(delta_rule_fn fn, const evv_word *regs,
++                         const uint8_t *stack, size_t bytes);
++
++__asm__(
++".text\n"
++".p2align 2\n"
++".globl _evv_call_packed\n"
++".private_extern _evv_call_packed\n"
++"_evv_call_packed:\n"
++"    stp x29, x30, [sp, #-16]!\n"
++"    mov x29, sp\n"
++"    sub sp, sp, x3\n"
++"    mov x16, x0\n"
++"    mov x17, x1\n"
++"    mov x9, #0\n"
++"1:  cmp x9, x3\n"
++"    b.hs 2f\n"
++"    ldrb w10, [x2, x9]\n"
++"    strb w10, [sp, x9]\n"
++"    add x9, x9, #1\n"
++"    b 1b\n"
++"2:  ldp x0, x1, [x17, #0]\n"
++"    ldp x2, x3, [x17, #16]\n"
++"    ldp x4, x5, [x17, #32]\n"
++"    ldp x6, x7, [x17, #48]\n"
++"    blr x16\n"
++"    mov sp, x29\n"
++"    ldp x29, x30, [sp], #16\n"
++"    ret\n"
++);
++
++static evv_word call_apple(delta_rule_fn fn, uint32_t m, const int32_t *a,
++                           int n, int named)
++{
++    evv_word regs[8];
++    uint8_t  stack[25 * 8 + 16];
++    size_t   off = 0;
++    int      i, reg = 0;
++
++    memset(regs, 0, sizeof regs);
++    memset(stack, 0, sizeof stack);
++    if (n > 25)
++        n = 25;
++    for (i = 0; i < n; i++) {
++        evv_word w = WM(m, i, a[i]);
++        int      isNamed = named < 0 || i < named;
++
++        if (isNamed && reg < 8) {
++            regs[reg++] = w;
++        } else if (!isNamed || ((m >> i) & 1u)) {
++            off = (off + 7) & ~(size_t)7;
++            memcpy(stack + off, &w, 8);
++            off += 8;
++        } else {
++            int32_t v = (int32_t)w;
++
++            off = (off + 3) & ~(size_t)3;
++            memcpy(stack + off, &v, 4);
++            off += 4;
++        }
++    }
++    off = (off + 15) & ~(size_t)15;
++    return evv_call_packed(fn, regs, stack, off);
++}
++
++#endif
++
+ /* Calling with more arguments than the entry declares is what the original
+    never has to do; here the number is only known at run time, so the common
+    arities are called exactly and the rare long ones go through one wide
+@@ -345,6 +454,14 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
+ static int32_t call_entry(delta_rule_fn fn, uint32_t m,
+                           const int32_t *a, int n)
+ {
++#if defined(__APPLE__) && defined(__aarch64__)
++    {
++        int named = variadic_named(fn);
++
++        if (n > 8 || named >= 0)
++            return RM(m, call_apple(fn, m, a, n, named));
++    }
++#endif
+     switch (n) {
+     case 0:  return RM(m, ((I0)fn)());
+     case 1:  return RM(m, ((I1)fn)(WM(m, 0, a[0])));
+diff --git a/src/port/evv_land.c b/src/port/evv_land.c
+index f08c79b..e7dacef 100644
+--- a/src/port/evv_land.c
++++ b/src/port/evv_land.c
+@@ -272,11 +272,76 @@ EVV_LAND_HIDE
+ "    jmp *%r11\n"
+ );
+ 
++#elif defined(__aarch64__)
++
++/* The same two halves for 64-bit ARM, which is every Apple silicon Mac and
++   every iPhone. setjmp cannot stand in here: evv_land_save would be a
++   function wrapping it, and landing later restores that function's frame
++   after it has returned, so it goes back through a return address that
++   something else has since written over.
++
++   A call on ARM leaves the stack pointer where it was and the return address
++   in x30, so saving both on entry lands exactly where the save returned to.
++   Saved: the callee's x19 to x28, the frame pointer x29, x30, the stack
++   pointer and d8 to d15, the callee-saved half of the floating point
++   registers, in 168 bytes. x18 is the platform's and is left alone. */
++#if defined(__APPLE__)
++#define EVV_ARM_SYM(n) "_" #n
++#define EVV_LAND_HIDE \
++    ".private_extern _evv_land_save\n" \
++    ".private_extern _evv_land_jump\n"
++#else
++#define EVV_ARM_SYM(n) #n
++#define EVV_LAND_HIDE \
++    ".hidden evv_land_save\n" \
++    ".hidden evv_land_jump\n"
++#endif
++
++__asm__(
++".text\n"
++".p2align 2\n"
++".globl " EVV_ARM_SYM(evv_land_save) "\n"
++".globl " EVV_ARM_SYM(evv_land_jump) "\n"
++EVV_LAND_HIDE
++
++EVV_ARM_SYM(evv_land_save) ":\n"
++"    stp x19, x20, [x0, #0]\n"
++"    stp x21, x22, [x0, #16]\n"
++"    stp x23, x24, [x0, #32]\n"
++"    stp x25, x26, [x0, #48]\n"
++"    stp x27, x28, [x0, #64]\n"
++"    stp x29, x30, [x0, #80]\n"
++"    mov x16, sp\n"
++"    str x16, [x0, #96]\n"
++"    stp d8, d9, [x0, #104]\n"
++"    stp d10, d11, [x0, #120]\n"
++"    stp d12, d13, [x0, #136]\n"
++"    stp d14, d15, [x0, #152]\n"
++"    mov w0, #0\n"
++"    ret\n"
++
++EVV_ARM_SYM(evv_land_jump) ":\n"
++"    ldp x19, x20, [x0, #0]\n"
++"    ldp x21, x22, [x0, #16]\n"
++"    ldp x23, x24, [x0, #32]\n"
++"    ldp x25, x26, [x0, #48]\n"
++"    ldp x27, x28, [x0, #64]\n"
++"    ldp x29, x30, [x0, #80]\n"
++"    ldr x16, [x0, #96]\n"
++"    mov sp, x16\n"
++"    ldp d8, d9, [x0, #104]\n"
++"    ldp d10, d11, [x0, #120]\n"
++"    ldp d12, d13, [x0, #136]\n"
++"    ldp d14, d15, [x0, #152]\n"
++"    mov w0, w1\n"
++"    ret\n"
++);
++
+ #else
+ 
+-/* Where the registers are not x86-64, the C library will do: a thirty-two bit
+-   build has a pointer that fits a value, so nothing here has ever been the
+-   problem there. */
++/* Where the registers are neither x86-64 nor ARM, the C library will do: a
++   thirty-two bit build has a pointer that fits a value, so nothing here has
++   ever been the problem there. */
+ #include <setjmp.h>
+ 
+ int evv_land_save(void *place)
+diff --git a/src/port/evv_land.h b/src/port/evv_land.h
+index bc631e7..4d44028 100644
+--- a/src/port/evv_land.h
++++ b/src/port/evv_land.h
+@@ -33,6 +33,11 @@
+ /* Eighty bytes, and eight of them is all the alignment it asks for. */
+ #define EVV_LAND_WORDS 10
+ 
++#elif defined(__aarch64__)
++
++/* x19 to x30, the stack pointer and d8 to d15: 168 bytes. */
++#define EVV_LAND_WORDS 21
++
+ #else
+ 
+ /* Elsewhere the place holds the C library's own buffer, so it is as big as
+diff --git a/src/port/port_posix.c b/src/port/port_posix.c
+index dddc844..24a95ee 100644
+--- a/src/port/port_posix.c
++++ b/src/port/port_posix.c
+@@ -15,6 +15,7 @@
+ #include <time.h>
+ #include <errno.h>
+ #include <limits.h>
++#include <unistd.h>
+ #include "evv_port.h"
+ #include "evv_arena.h"
+ 
+@@ -304,6 +305,14 @@ evv_task *evv_task_start(void (*entry)(void *), void *arg, int stack_bytes)
+     pthread_attr_init(&attr);
+     if (stack_bytes < PTHREAD_STACK_MIN)
+         stack_bytes = PTHREAD_STACK_MIN;
++    /* macOS and iOS refuse a size that is not a whole number of pages, and
++       then quietly use their own default, so round up to one. */
++    {
++        long page = sysconf(_SC_PAGESIZE);
++
++        if (page > 0 && stack_bytes % page != 0)
++            stack_bytes += (int)(page - stack_bytes % page);
++    }
+     /* The system puts the stack where it likes, which is usually far above
+        what a 32-bit value can name. That is allowed to be true: nothing the
+        machine holds a pointer to lives on a C stack any more -- a rule's frame

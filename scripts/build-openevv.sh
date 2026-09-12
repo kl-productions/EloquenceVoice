@@ -24,7 +24,13 @@ if [ ! -d "$SRC/.git" ]; then
     git clone https://github.com/mudb0y/openevv.git "$SRC"
 fi
 git -C "$SRC" fetch --quiet origin "$REF"
-git -C "$SRC" checkout --quiet FETCH_HEAD
+git -C "$SRC" checkout --quiet --force FETCH_HEAD
+# Fixes of ours the engine needs on Apple's arm64, put back clean each run.
+for p in "$ROOT"/patches/*.patch; do
+    [ -e "$p" ] || continue
+    echo "== applying $(basename "$p")"
+    git -C "$SRC" apply --whitespace=nowarn "$p"
+done
 cp "$ROOT/scripts/ios.mk" "$SRC/ios.mk"
 
 langpaths=""
