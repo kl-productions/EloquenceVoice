@@ -7,10 +7,10 @@ returning function restored a dead frame. port_posix: page-sized stacks, and
 timed waits whose deadline is on the clock the condition variable uses.
 
 diff --git a/src/delta/delta_rules.c b/src/delta/delta_rules.c
-index f30d5ba..59a50c9 100644
+index f30d5ba..2172cbc 100644
 --- a/src/delta/delta_rules.c
 +++ b/src/delta/delta_rules.c
-@@ -338,6 +338,115 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
+@@ -338,6 +338,121 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
            WM(m, 20, a[20]), WM(m, 21, a[21]), WM(m, 22, a[22]), WM(m, 23, a[23]), \
            WM(m, 24, a[24])
  
@@ -29,14 +29,20 @@ index f30d5ba..59a50c9 100644
 + * Every argument an entry takes past the eighth is either a pointer or an
 + * int32_t, and the mask already says which, so those calls are laid out by
 + * hand here and made through evv_call_packed. Only those: every other call is
-+ * made the ordinary way below. Declared as nothing but addresses to compare
-+ * against; their real prototypes live with their definitions. */
-+extern void setNonSequential(void);
-+extern void registerLanguage(void);
-+extern void registerPhoneme(void);
-+extern void registerVoice(void);
-+extern void registerSAPIVoice(void);
-+extern void callSynthesizeArray(void);
++ * made the ordinary way below.
++ *
++ * They are declared here as nothing but addresses to compare against, and
++ * through a macro on purpose: tools/rules/entrysig.py builds every entry's
++ * argument mask from the first declaration of its name it finds under src,
++ * and a plain `void name(void)' in this file would tell it none of them take
++ * a pointer. Their real prototypes live with their definitions. */
++#define EVV_ADDRESS_ONLY(name) extern void name(void)
++EVV_ADDRESS_ONLY(setNonSequential);
++EVV_ADDRESS_ONLY(registerLanguage);
++EVV_ADDRESS_ONLY(registerPhoneme);
++EVV_ADDRESS_ONLY(registerVoice);
++EVV_ADDRESS_ONLY(registerSAPIVoice);
++EVV_ADDRESS_ONLY(callSynthesizeArray);
 +
 +/* How many named arguments a variadic entry has, or -1 for one that is not. */
 +static int variadic_named(delta_rule_fn fn)
@@ -126,7 +132,7 @@ index f30d5ba..59a50c9 100644
  /* Calling with more arguments than the entry declares is what the original
     never has to do; here the number is only known at run time, so the common
     arities are called exactly and the rare long ones go through one wide
-@@ -345,6 +454,14 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
+@@ -345,6 +460,14 @@ typedef evv_word (*IN)(evv_word, evv_word, evv_word, evv_word, evv_word, evv_wor
  static int32_t call_entry(delta_rule_fn fn, uint32_t m,
                            const int32_t *a, int n)
  {
