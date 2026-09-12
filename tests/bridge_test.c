@@ -144,6 +144,8 @@ int main(int argc, char **argv)
     long     base, n;
     int      fin, queued;
 
+    /* Unbuffered, so a crash still leaves the checks that ran in the log. */
+    setvbuf(stdout, 0, _IONBF, 0);
     wavdir = argc > 1 ? argv[1] : 0;
 
     h = elq_host_create(11025);

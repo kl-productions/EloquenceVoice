@@ -34,12 +34,30 @@ jobs:
         run: |
           set -eu
           cd Vendor/openevv
-          gmake -j"$(sysctl -n hw.ncpu)" RULES=bytecode BUILD=build-host TRIM= build-host/libevv.a
-          cc -O2 -std=gnu99 -w -Iinclude -Isrc/port -c lib/eci_api.c -o build-host/eci_api.o
-          cc -O2 -std=gnu11 -Wall -Wextra -Iinclude -I../../Shared/Engine \
+          gmake -j"$(sysctl -n hw.ncpu)" RULES=bytecode BUILD=build-host TRIM= CFLAGS=-g \
+            build-host/libevv.a build-host/evv
+          cc -g -O2 -std=gnu99 -w -Iinclude -Isrc/port -c lib/eci_api.c -o build-host/eci_api.o
+          cc -g -O2 -std=gnu11 -Wall -Wextra -Iinclude -I../../Shared/Engine \
             ../../tests/bridge_test.c ../../Shared/Engine/elq_bridge.c \
             build-host/eci_api.o build-host/libevv.a -lpthread -lm -o build-host/bridge_test
           mkdir -p ../../test-wav
+
+          # The engine's own command first: if this crashes too, the fault is
+          # in the engine on Apple's arm64 rather than in the bridge.
+          echo "== openevv's own evv on this Mac"
+          if build-host/evv -o ../../test-wav/evv-command.wav "Hello from Eloquence."; then
+            ls -l ../../test-wav/evv-command.wav
+          else
+            echo "evv failed with exit $?"
+            lldb --batch -o run -k "thread backtrace all" -k quit -- \
+              build-host/evv -o /tmp/evv.wav "Hello from Eloquence." || true
+          fi
+
+          echo "== the bridge test under the debugger"
+          lldb --batch -o run -k "thread backtrace all" -k quit -- \
+            build-host/bridge_test ../../test-wav || true
+
+          echo "== the bridge test on its own"
           build-host/bridge_test ../../test-wav
 
       - uses: actions/upload-artifact@v4
