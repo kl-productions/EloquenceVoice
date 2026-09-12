@@ -42,6 +42,53 @@ open EloquenceVoice.xcodeproj
 
 In `project.yml`, change `BUNDLE_ROOT` to something unique, like `com.yourname.eloquencevoice`. Then pick your team under Signing for both targets and run it on your iPhone.
 
+## Path C: TestFlight, for you and a few friends
+
+This needs a paid Apple Developer account. Builds go to **internal testers** only. Internal testers are people on your App Store Connect team, up to 100 of them. Their builds skip Apple's review, and each build lasts 90 days.
+
+Remember that the voice data belongs to IBM, so giving the app to friends is distributing it. Keep this to people you know.
+
+### One-time setup
+
+1. **Find your Team ID.** Sign in at developer.apple.com/account and scroll to **Membership details**. The Team ID is the 10-character code there.
+2. **Register the identifiers.** Go to developer.apple.com/account, then **Certificates, Identifiers & Profiles**, then **Identifiers**, and use **+** for each of these:
+   - An **App Group** with the identifier `group.com.klproductions.eloquencevoice`.
+   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice`. Turn on **App Groups**, and choose the group from the step above.
+   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice.synth`, with **App Groups** turned on and the same group chosen.
+3. **Create the app record.** In App Store Connect, go to **Apps**, then **+**, then **New App**. Choose platform iOS, name Eloquence Voice, language English (U.S.), bundle ID `com.klproductions.eloquencevoice`, and SKU `eloquencevoice`. If the name is already taken on the App Store, add a word to it. That name is only used by App Store Connect and TestFlight.
+4. **Create an API key.** In App Store Connect, go to **Users and Access**, then **Integrations**, then **App Store Connect API**, then **Team Keys**, and use **+**. Give it the access level **Admin**, which the build needs to create signing certificates and profiles. Download the `.p8` file; Apple only lets you download it once. Note the **Key ID**, and the **Issuer ID** shown above the key list.
+5. **Give GitHub the key and Team ID.** On your PC, run the commands below. The three secret commands ask you to paste each value. The last one reads the `.p8` file directly, so replace the file name with yours.
+
+```bash
+gh variable set APPLE_TEAM_ID -R kl-productions/EloquenceVoice
+```
+
+```bash
+gh secret set APP_STORE_CONNECT_KEY_ID -R kl-productions/EloquenceVoice
+```
+
+```bash
+gh secret set APP_STORE_CONNECT_ISSUER_ID -R kl-productions/EloquenceVoice
+```
+
+```bash
+gh secret set APP_STORE_CONNECT_KEY_P8 -R kl-productions/EloquenceVoice < AuthKey_XXXXXXXXXX.p8
+```
+
+### Uploading a build
+
+```bash
+gh workflow run testflight -R kl-productions/EloquenceVoice
+```
+
+You can also go to **Actions**, then **testflight**, then **Run workflow**. It takes about 20–40 minutes. After that, Apple needs roughly another 10–30 minutes to process the build before it appears in App Store Connect under **TestFlight**.
+
+### Adding your friends
+
+1. In App Store Connect, go to **Users and Access** and invite each friend. The role can be as limited as **Customer Support**. They accept by email.
+2. Go to **TestFlight**, then **Internal Testing**, create a group, add your friends, and add the build.
+3. Friends install the **TestFlight** app from the App Store and accept the invite. Then they follow "Turning it on" below.
+
 ## Turning it on
 
 1. Open **Eloquence Voice** once and tap **Refresh voice list**.
