@@ -6,7 +6,7 @@ It uses [OpenEVV](https://github.com/mudb0y/openevv), a rebuild of the original 
 
 ## Read this first
 
-- **You need iOS 17 or later.** Apple added support for voices from other apps in iOS 17, not iOS 16. iOS 16 only let you use Apple's own voices.
+- **You need iOS 16 or later.** That's when Apple added support for voices from other apps.
 - **You don't need a Mac.** GitHub can build the app on its own Mac computers for free. You then install it from Windows with Sideloadly. Both paths are covered below.
 - **Personal use only.** The engine code is MIT licensed, but the language data comes from IBM's original files and still belongs to IBM. OpenEVV's authors say they can't license it to anyone. Don't publish this on the App Store or share the built app.
 - **This has not been run on a real iPhone yet.** It was written without a Mac, so the first build may turn up compile errors. See "If something goes wrong" below.
@@ -29,7 +29,7 @@ It uses [OpenEVV](https://github.com/mudb0y/openevv), a rebuild of the original 
 6. Plug in your iPhone, open Sideloadly, drag in the `.ipa`, enter your Apple ID, and click Start.
 7. On the iPhone, open Settings › General › VPN & Device Management and trust your Apple ID. On iOS 16 and later, also turn on Settings › Privacy & Security › Developer Mode.
 
-With a free Apple ID, the app stops opening after 7 days, and you reinstall it with Sideloadly. A paid developer account ($99/year) lasts a year. It also makes the shared settings between the app and the voice more reliable, because free accounts sometimes can't use App Groups.
+With a free Apple ID, the app stops opening after 7 days, and you reinstall it with Sideloadly. A paid developer account ($99/year) lasts a year. Voice settings work either way: the app saves them inside the voice extension itself, so no App Group is needed.
 
 ## Path B: with a Mac
 
@@ -52,9 +52,10 @@ Remember that the voice data belongs to IBM, so giving the app to friends is dis
 
 1. **Find your Team ID.** Sign in at developer.apple.com/account and scroll to **Membership details**. The Team ID is the 10-character code there.
 2. **Register the identifiers.** Go to developer.apple.com/account, then **Certificates, Identifiers & Profiles**, then **Identifiers**, and use **+** for each of these:
-   - An **App Group** with the identifier `group.com.klproductions.eloquencevoice`.
-   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice`. Turn on **App Groups**, and choose the group from the step above.
-   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice.synth`, with **App Groups** turned on and the same group chosen.
+   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice`.
+   - An **App ID** of type App with the bundle ID `com.klproductions.eloquencevoice.synth`.
+
+   Neither needs any capabilities turned on.
 3. **Create the app record.** In App Store Connect, go to **Apps**, then **+**, then **New App**. Choose platform iOS, name Eloquence Voice, language English (U.S.), bundle ID `com.klproductions.eloquencevoice`, and SKU `eloquencevoice`. If the name is already taken on the App Store, add a word to it. That name is only used by App Store Connect and TestFlight.
 4. **Create an API key.** In App Store Connect, go to **Users and Access**, then **Integrations**, then **App Store Connect API**, then **Team Keys**, and use **+**. Give it the access level **Admin**, which the build needs to create signing certificates and profiles. Download the `.p8` file; Apple only lets you download it once. Note the **Key ID**, and the **Issuer ID** shown above the key list.
 5. **Give GitHub the key and Team ID.** On your PC, run the commands below. The three secret commands ask you to paste each value. The last one reads the `.p8` file directly, so replace the file name with yours.
@@ -102,14 +103,15 @@ You can add it to the VoiceOver rotor under Settings › Accessibility › Voice
 - **The build fails in "Build the engine".** Apple's compiler is stricter than the Linux one OpenEVV is tested with. Copy the first `error:` lines from the log and bring them back here. They're usually small fixes.
 - **The voices don't show up in Settings.** Open the app, tap Refresh voice list, wait a minute, then restart the iPhone.
 - **Some text is skipped or sounds odd.** Turn off **Use the SSML reader** in the app.
-- **Voice settings don't change anything.** Your Apple ID may not support App Groups. The voice still works, just with its default settings.
+- **Nothing speaks, or the voices never appear.** Open the app. It loads the voice extension the same way VoiceOver does, and if that fails it shows a screen explaining why. "iOS reports no Eloquence voice extension" means the extension was left out when the app was installed. In Sideloadly, check that app extensions aren't being removed, then install again. If the app loads, the **Status** section at the bottom shows whether the engine is running and how many voices it offers iOS.
+- **The app's Speak button works, but VoiceOver doesn't list the voices.** Tap **Refresh VoiceOver's voice list**, wait a minute, then restart the phone.
 
 ## How it works
 
 - `Vendor/OpenEVV.xcframework`: the engine, built for iPhone by `scripts/build-openevv.sh`.
 - `Shared/Engine/elq_bridge.c`: starts the engine, passes text in, and hands samples to iOS through a buffer that is safe for real-time audio.
 - `Extension/EloquenceAudioUnit.swift`: the `AVSpeechSynthesisProviderAudioUnit` that iOS loads when a voice speaks.
-- `App/`: the settings and preview app.
+- `App/`: the settings and preview app. It loads the extension directly, speaks through it, and changes its settings through the audio unit's message channel, the way the eSpeak-NG app does.
 - `tests/bridge_test.c`: drives the bridge the way iOS does and checks 16 behaviors, including SSML rate, pitch, and volume, cancelling, long documents, and sample rates. GitHub runs it on a Mac before building the app, and you can download what it recorded as **bridge-test-recordings**.
 - `samples/`: recordings made by that test on Windows, so you can hear the engine before installing anything.
 

@@ -11,33 +11,20 @@ struct VoiceTuning: Codable, Equatable {
     var volume: Int?            // 0...100
 }
 
-/// Shared between the app and the extension through the App Group.
+/// The engine's settings. The extension keeps them in its own container; the app
+/// reads and writes them through the audio unit's message channel, so no App Group
+/// is needed and they work with a free Apple ID.
 struct SynthSettings: Codable, Equatable {
     var sampleRate = 22050
     var useSSMLReader = true
     var tunings: [String: VoiceTuning] = [:]
 
-    private static let key = "synthSettings"
-
-    private static var store: UserDefaults {
-        if let group = Bundle.main.object(forInfoDictionaryKey: "OEVVAppGroup") as? String,
-           !group.isEmpty,
-           let shared = UserDefaults(suiteName: group) {
-            return shared
-        }
-        return .standard
+    func encoded() -> Data {
+        (try? JSONEncoder().encode(self)) ?? Data()
     }
 
-    static func load() -> SynthSettings {
-        guard let data = store.data(forKey: key),
-              let settings = try? JSONDecoder().decode(SynthSettings.self, from: data)
-        else { return SynthSettings() }
-        return settings
-    }
-
-    func save() {
-        if let data = try? JSONEncoder().encode(self) {
-            Self.store.set(data, forKey: Self.key)
-        }
+    static func decode(_ data: Data?) -> SynthSettings? {
+        guard let data else { return nil }
+        return try? JSONDecoder().decode(SynthSettings.self, from: data)
     }
 }
