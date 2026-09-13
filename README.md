@@ -92,7 +92,7 @@ You can also go to **Actions**, then **testflight**, then **Run workflow**. It t
 
 ## Turning it on
 
-1. Open **Eloquence Voice** once and tap **Refresh voice list**.
+1. Open **Eloquence Voice** once. Tap **Speak** to check the voice works, then tap **Refresh VoiceOver's voice list**.
 2. Go to Settings › Accessibility › VoiceOver › Speech › Voice, pick your language, and choose a voice marked **(OpenEVV)**.
 3. For Speak Selection and Speak Screen, go to Settings › Accessibility › Spoken Content › Voices.
 
