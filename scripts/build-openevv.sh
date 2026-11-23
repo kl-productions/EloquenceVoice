@@ -5,14 +5,15 @@
 #
 #   OPENEVV_LANGS  languages to link, e.g. "enus engb dede" (default: enus)
 #   OPENEVV_RULES  c (fast speech, slow build) or bytecode (default: c)
-#   OPENEVV_REF    openevv branch, tag or commit (default: main)
+#   OPENEVV_REF    openevv branch, tag or commit (default: the commit our
+#                  patches were made against; a newer one may not take them)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/Vendor/openevv"
 LANGS="${OPENEVV_LANGS:-enus}"
 RULES="${OPENEVV_RULES:-c}"
-REF="${OPENEVV_REF:-main}"
+REF="${OPENEVV_REF:-31ab3689552c17690423a5e62688d04bcb19c25a}"
 MAKE="${MAKE:-gmake}"
 MIN_IOS=17.0
 
