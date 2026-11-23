@@ -82,6 +82,14 @@ jobs:
           mkdir -p Payload
           cp -R DerivedData/Build/Products/Release-iphoneos/EloquenceVoice.app Payload/
           ls Payload/EloquenceVoice.app/PlugIns
+          # The build is unsigned, so it carries no entitlements, and Sideloadly
+          # copies entitlements from the signature it replaces. A throwaway
+          # signature holding them lets Sideloadly keep Inter-App Audio, which
+          # iOS needs before it will register the voice extension. The
+          # extension is signed first, then the app around it.
+          codesign --force --sign - --entitlements Extension/Extension.entitlements             Payload/EloquenceVoice.app/PlugIns/EloquenceSynth.appex
+          codesign --force --sign - --entitlements App/App.entitlements             Payload/EloquenceVoice.app
+          codesign -d --entitlements - Payload/EloquenceVoice.app
           zip -qry EloquenceVoice-unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4

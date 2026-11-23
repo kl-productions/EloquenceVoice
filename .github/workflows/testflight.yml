@@ -25,9 +25,14 @@ jobs:
       KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
-      ARCHIVE: ${{ runner.temp }}/EloquenceVoice.xcarchive
-      KEY_DIR: ${{ runner.temp }}/asc
     steps:
+      # The runner context is not allowed in a job's env, which made GitHub
+      # reject this whole file, so these two paths are set here instead.
+      - name: Set the work paths
+        run: |
+          echo "ARCHIVE=$RUNNER_TEMP/EloquenceVoice.xcarchive" >> "$GITHUB_ENV"
+          echo "KEY_DIR=$RUNNER_TEMP/asc" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - name: Check the signing settings are in place

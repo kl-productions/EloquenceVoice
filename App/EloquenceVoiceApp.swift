@@ -39,7 +39,7 @@ struct StartupFailureView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text(message)
                 Text(componentsFound == 0
-                     ? "iOS reports no Eloquence voice extension in this app. If you installed it with Sideloadly, check that app extensions are not being removed, then install it again."
+                     ? "iOS reports no Eloquence voice extension in this app. Delete the app, restart the iPhone, and install the newest build again. If it still happens, check in Sideloadly that app extensions are not being removed."
                      : "iOS found the voice extension \(componentsFound) time(s), so the extension is installed but did not start.")
                 Button("Try again", action: retry)
                     .buttonStyle(.bordered)
